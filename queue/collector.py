@@ -1,55 +1,36 @@
 import redis
 import json
-from queue.manager import QueueManager  # Import the manager for `is_complete`
-from queue.tasks import process_chunk  # Import the processing function
-
 
 class Collector:
-    def __init__(self, tracking_prefix: str = "chunk_tracking:", results_prefix: str = "results:", strategy="order_then_process"):
+    def __init__(self, results_prefix: str = "processed_result:", final_prefix: str = "final_result:"):
         self.redis = redis.StrictRedis(host='localhost', port=6379, db=0)
-        self.tracking_prefix = tracking_prefix
         self.results_prefix = results_prefix
-        self.strategy = strategy
-        self.manager = QueueManager(queue_name="dummy_queue")  # Replace with actual queue name
+        self.final_prefix = final_prefix
 
-    def collect_chunks(self, id: str) -> dict:
-        # Check if all chunks are complete
-        if not self.manager.is_complete(id):
-            return {"error": f"Chunks not complete for ID: {id}"}
+    def collect_and_store(self, id: str, total_chunks: int) -> dict:
+        # Fetch all processed chunks
+        chunks = []
+        for order in range(total_chunks):
+            result_key = f"{self.results_prefix}{id}:{order}"
+            chunk = self.redis.get(result_key)
+            if chunk:
+                chunks.append(json.loads(chunk))
+            else:
+                chunks.append(None)  # Missing chunks get a placeholder
 
-        # Retrieve tracking info
-        tracking_key = f"{self.tracking_prefix}{id}"
-        total_chunks = int(self.redis.hget(tracking_key, "total_chunks") or 0)
+        # Verify all chunks are complete
+        if None in chunks:
+            return {"error": f"Missing chunks for ID: {id}"}
 
-        if total_chunks == 0:
-            return {"error": f"No chunks available for ID: {id}"}
+        # Combine and store the final result
+        final_result = {"id": id, "chunks": chunks}
+        final_result_key = f"{self.final_prefix}{id}"
+        self.redis.set(final_result_key, json.dumps(final_result))
 
-        # Combine chunks based on strategy
-        if self.strategy == "order_then_process":
-            chunks = [self._get_chunk(tracking_key, i) for i in range(total_chunks)]
-            result = {"id": id, "chunks": chunks}
-        elif self.strategy == "process_then_order":
-            chunks = [self._process_chunk(self._get_chunk(tracking_key, i)) for i in range(total_chunks)]
-            result = {"id": id, "processed_chunks": chunks}
-        else:
-            return {"error": f"Invalid strategy: {self.strategy}"}
+        return {"message": f"Final result stored for ID: {id}", "result_key": final_result_key}
 
-        # Store final result
-        result_key = f"{self.results_prefix}{id}"
-        self.redis.set(result_key, json.dumps(result))
-        return result
-
-    def _get_chunk(self, tracking_key: str, order: int) -> dict:
-        chunk_key = f"{tracking_key}:chunk:{order}"
-        chunk = self.redis.get(chunk_key)
-        return json.loads(chunk) if chunk else None
-
-    def _process_chunk(self, chunk: dict) -> dict:
-        if chunk:
-            return process_chunk(chunk)  # Process the chunk using the tasks module logic
-        return {"error": "Invalid chunk"}
-    def get_result(self, id: str) -> dict:
-        # Retrieve the consolidated result
-        result_key = f"{self.results_prefix}{id}"
-        result = self.redis.get(result_key)
-        return json.loads(result) if result else {"error": f"Result not found for ID: {id}"}
+    def get_final_result(self, id: str) -> dict:
+        # Retrieve the final combined result
+        final_result_key = f"{self.final_prefix}{id}"
+        result = self.redis.get(final_result_key)
+        return json.loads(result) if result else {"error": f"Final result not found for ID: {id}"}
