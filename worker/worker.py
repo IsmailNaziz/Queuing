@@ -3,12 +3,12 @@ import time
 import json
 from queue.manager import QueueManager
 from queue.tasks import process_chunk
-
+from config.settings import REDIS_HOST, REDIS_PORT, REDIS_DB, WORKER_SLEEP_TIME
 
 class Worker:
     def __init__(self, queue_name: str, worker_id: str):
         self.manager = QueueManager(queue_name=queue_name)
-        self.redis = redis.StrictRedis(host='localhost', port=6379, db=0)
+        self.redis = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
         self.worker_id = worker_id
         self.running = True
         self.lock_prefix = "chunk_lock:"
@@ -18,13 +18,10 @@ class Worker:
             # Fetch a chunk with blocking
             chunk = self._fetch_chunk()
             if chunk:
-                # Process the chunk
                 result = process_chunk(chunk)
-
-                # Store the result
                 self._store_result(result)
             else:
-                time.sleep(1)  # Wait if no chunks are available
+                time.sleep(WORKER_SLEEP_TIME)  # Configurable sleep
 
     def _fetch_chunk(self):
         while self.running:

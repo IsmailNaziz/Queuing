@@ -1,10 +1,10 @@
 import redis
 import json
-
+from config.settings import REDIS_HOST, REDIS_PORT, REDIS_DB
 
 class QueueManager:
     def __init__(self, queue_name: str, tracking_prefix: str = "chunk_tracking:"):
-        self.redis = redis.StrictRedis(host='localhost', port=6379, db=0)
+        self.redis = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
         self.queue_name = queue_name
         self.tracking_prefix = tracking_prefix
 

@@ -1,9 +1,10 @@
 import redis
 import json
+from config.settings import REDIS_HOST, REDIS_PORT, REDIS_DB, RESULTS_PREFIX, FINAL_RESULTS_PREFIX
 
 class Collector:
-    def __init__(self, results_prefix: str = "processed_result:", final_prefix: str = "final_result:"):
-        self.redis = redis.StrictRedis(host='localhost', port=6379, db=0)
+    def __init__(self, results_prefix: str = RESULTS_PREFIX, final_prefix: str = FINAL_RESULTS_PREFIX):
+        self.redis = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
         self.results_prefix = results_prefix
         self.final_prefix = final_prefix
 

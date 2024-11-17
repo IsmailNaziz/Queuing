@@ -1,9 +1,10 @@
+from config.settings import WORKER_COUNT, CHUNKS_QUEUE_NAME
 from api.server import app
-from queue.manager import QueueManager
 from queue.collector import Collector
 from worker import Worker
 import threading
 import time
+
 
 def start_worker(queue_name, worker_id):
     """Start a worker."""
