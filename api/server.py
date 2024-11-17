@@ -1,6 +1,6 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from api.models import Chunk
-from queue.manager import QueueManager
+from queue_components.manager import QueueManager
 from config.settings import CHUNKS_QUEUE_NAME
 
 app = FastAPI()

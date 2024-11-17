@@ -1,6 +1,6 @@
 import redis
 import json
-from config.settings import REDIS_HOST, REDIS_PORT, REDIS_DB
+from config.settings import REDIS_HOST, REDIS_PORT, REDIS_DB, TRACKING_PREFIX
 
 class QueueManager:
     def __init__(self, queue_name: str, tracking_prefix: str = "chunk_tracking:"):
@@ -9,14 +9,15 @@ class QueueManager:
         self.tracking_prefix = tracking_prefix
 
     def push(self, chunk: dict):
-        # Add chunk to the queue
+        """Push chunk into the queue and update tracking."""
         self.redis.rpush(self.queue_name, json.dumps(chunk))
 
-        # Track chunks by ID
-        tracking_key = f"{self.tracking_prefix}{chunk['id']}"
+        # Update tracking information
+        tracking_key = f"{TRACKING_PREFIX}{chunk['id']}"
         self.redis.hincrby(tracking_key, "received_chunks", 1)
         if chunk.get("isLastChunk"):
             self.redis.hset(tracking_key, "total_chunks", chunk["order"] + 1)
+            self.redis.hset(tracking_key, "isLastChunk", 1)
 
     def pop(self):
         message = self.redis.lpop(self.queue_name)

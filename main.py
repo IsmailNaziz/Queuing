@@ -1,55 +1,59 @@
-from config.settings import WORKER_COUNT, CHUNKS_QUEUE_NAME
 from api.server import app
-from queue.collector import Collector
-from worker import Worker
+from queue_components.manager import QueueManager
+from queue_components.collector import Collector
+from worker.worker import Worker
+from config.settings import CHUNKS_QUEUE_NAME, WORKER_COUNT
 import threading
 import time
+import uvicorn
 
-
-def start_worker(queue_name, worker_id):
-    """Start a worker."""
-    worker = Worker(queue_name=queue_name, worker_id=worker_id)
+def start_worker(worker_id: str):
+    """Start a single worker."""
+    worker = Worker(queue_name=CHUNKS_QUEUE_NAME, worker_id=worker_id)
     worker.run()
 
 def start_api_server():
     """Start the API server."""
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 def orchestrate():
-    """Orchestrate the system components."""
+    """Orchestrate the queue, workers, and collector."""
     # Configuration
-    queue_name = "chunks_queue"
-    total_chunks = 5  # For simulation
-    collector = Collector()
-    manager = QueueManager(queue_name=queue_name)
+    collection_strategy = "order_then_process"  # Choose strategy: "order_then_process" or "process_then_order"
+    collector = Collector(strategy=collection_strategy)
+    manager = QueueManager(queue_name=CHUNKS_QUEUE_NAME)
+    workers = []
+
+    # Start API server in a thread
+    api_thread = threading.Thread(target=start_api_server, daemon=True)
+    api_thread.start()
 
     # Start workers
-    workers = []
-    for i in range(2):  # Two workers for demonstration
-        worker_thread = threading.Thread(target=start_worker, args=(queue_name, f"worker_{i}"))
+    for i in range(WORKER_COUNT):
+        worker_thread = threading.Thread(target=start_worker, args=(f"worker_{i}",))
         workers.append(worker_thread)
         worker_thread.start()
 
-    # Simulate incoming chunks
-    for i in range(total_chunks):
-        chunk = {"id": "job_123", "chunk": f"chunk_{i}", "order": i, "isLastChunk": i == total_chunks - 1}
-        manager.push(chunk)
-        time.sleep(0.1)  # Simulate staggered chunk arrival
+    # Simulate collector waiting for chunks
+    job_id = "job_123"
+    total_chunks = 5
 
-    # Simulate collection
-    time.sleep(3)  # Wait for workers to process
-    result = collector.collect_and_store("job_123", total_chunks)
-    print(result)
+    print(f"Waiting for chunks for job: {job_id}")
+    if collector.await_chunks(job_id, total_chunks):
+        print(f"All chunks for job {job_id} received. Workers will process them.")
+
+    # Wait for workers to complete processing
+    time.sleep(3)  # Adjust based on expected workload
 
     # Retrieve final result
-    final_result = collector.get_final_result("job_123")
-    print(final_result)
+    result_key = f"final_result:{job_id}"
+    final_result = collector.redis.get(result_key)
+    if final_result:
+        print(f"Final result for job {job_id}: {final_result.decode()}")
 
-    # Clean up workers
+    # Stop worker threads gracefully
     for worker_thread in workers:
         worker_thread.join()
 
 if __name__ == "__main__":
-    # Start the orchestrator
     orchestrate()
